@@ -1,0 +1,23 @@
+server:
+  port: 8270
+spring:
+  application:
+    name: "ticketBooking"
+  datasource:
+    url: jdbc:mysql://localhost:3308/bookingsdb
+    username: root
+    password: root
+  sql:
+    init:
+      mode: always
+  jpa:
+    show-sql: true
+
+eureka:
+  instance:
+    preferIpAddress: true
+  client:
+    fetchRegistry: true
+    registerWithEureka: true
+    serviceUrl:
+      defaultZone: http://localhost:8070/eureka

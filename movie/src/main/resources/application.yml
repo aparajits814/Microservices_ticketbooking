@@ -1,0 +1,27 @@
+server:
+  port: 8081
+spring:
+  application:
+     name: "movies"
+  datasource:
+    url: jdbc:mysql://localhost:3306/moviesdb
+    username: root
+    password: root
+  sql:
+    init:
+      mode: always
+  jpa:
+    show-sql: true
+  data:
+    redis:
+      port: 6379
+      host: localhost
+
+eureka:
+  instance:
+    preferIpAddress: true
+  client:
+    fetchRegistry: true
+    registerWithEureka: true
+    serviceUrl:
+      defaultZone: http://localhost:8070/eureka

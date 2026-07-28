@@ -1,0 +1,39 @@
+server:
+  port: 9071
+spring:
+  application:
+    name: "payments"
+  datasource:
+    url: jdbc:mysql://localhost:3309/paymentsdb
+    username: root
+    password: root
+  sql:
+    init:
+      mode: always
+  jpa:
+    show-sql: true
+  Kafka:
+    bootstrap-servers: localhost:9092
+
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      properties:
+        spring.json.add.type.headers: false
+    admin:
+      auto-create: true
+
+eureka:
+  instance:
+    preferIpAddress: true
+  client:
+    fetchRegistry: true
+    registerWithEureka: true
+    serviceUrl:
+      defaultZone: http://localhost:8070/eureka
+
+stripe:
+  api-key: ${API_KEY}
+  webhook-key : ${WEBHOOK_KEY}
+  success-url: http://localhost:9071/api/paymentSuccess?session_id={CHECKOUT_SESSION_ID}
+  cancel-url: http://localhost:9071/api/paymentCancel?session_id={CHECKOUT_SESSION_ID}

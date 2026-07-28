@@ -1,0 +1,25 @@
+spring:
+  application:
+    name: "show"
+  datasource:
+    url: jdbc:mysql://localhost:3307/showsdb
+    username: root
+    password: root
+  sql:
+    init:
+      mode: always
+  jpa:
+    show-sql: true
+  data:
+    redis:
+      port: 6379
+      host: localhost
+
+eureka:
+  instance:
+    preferIpAddress: true
+  client:
+    fetchRegistry: true
+    registerWithEureka: true
+    serviceUrl:
+      defaultZone: http://localhost:8070/eureka
