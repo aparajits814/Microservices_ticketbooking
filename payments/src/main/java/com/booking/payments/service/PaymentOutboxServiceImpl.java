@@ -7,7 +7,6 @@ import com.booking.payments.repository.PaymentPollerRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.AllArgsConstructor;
-import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,19 +18,19 @@ public class PaymentOutboxServiceImpl implements PaymentOutboxService{
 
     private PaymentPollerRepository paymentPollerRepository;
 
+    private ObjectMapper objectMapper;
+
 
     @Override
     @Transactional
     public void publishPaymentSuccessEvent(ProcessingDto processingDto) throws JsonProcessingException {
 
-        ObjectMapper objectMapper = new ObjectMapper();
-
-        //kafkaTemplate.send(PaymentsConstants.PAYMENT_SUCCESS_TOPIC,processingDto);
         boolean exists = paymentPollerRepository.existsByPaymentIdAndBookingId(processingDto.getPaymentId(), processingDto.getBookingId());
 
         if(exists){
             return;
         }
+
         PaymentPollerEntity paymentPollerEntity = new PaymentPollerEntity();
         paymentPollerEntity.setEventType(PaymentsConstants.PAYMENT_CONFIRMED);
         paymentPollerEntity.setPaymentId(processingDto.getPaymentId());
@@ -49,8 +48,6 @@ public class PaymentOutboxServiceImpl implements PaymentOutboxService{
     @Transactional
     public void publishPaymentExpiredEvent(ProcessingDto processingDto) throws JsonProcessingException {
 
-        ObjectMapper objectMapper = new ObjectMapper();
-
         boolean exists = paymentPollerRepository.existsByPaymentIdAndBookingId(processingDto.getPaymentId(), processingDto.getBookingId());
 
         if(exists){
@@ -66,8 +63,6 @@ public class PaymentOutboxServiceImpl implements PaymentOutboxService{
         paymentPollerEntity.setCreatedAt(LocalDateTime.now());
 
         paymentPollerRepository.save(paymentPollerEntity);
-
-        //kafkaTemplate.send(PaymentsConstants.PAYMENT_EXPIRE_TOPIC,processingDto);
 
     }
 }

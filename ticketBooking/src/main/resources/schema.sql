@@ -18,3 +18,35 @@ CREATE TABLE IF NOT EXISTS booking_seats (
     REFERENCES booking(booking_id)
     ON DELETE CASCADE
     );
+
+CREATE TABLE IF NOT EXISTS track_booking (
+    booking_id VARCHAR(100) NOT NULL,
+    payment_id VARCHAR(100) NOT NULL,
+    PRIMARY KEY (booking_id,payment_id)
+    );
+
+CREATE TABLE IF NOT EXISTS booking_outbox (
+    id VARCHAR(100) PRIMARY KEY,
+    booking_id VARCHAR(100) NOT NULL,
+    payment_id VARCHAR(100) NOT NULL,
+    event_type VARCHAR(50) NOT NULL,
+    topic VARCHAR(100) NOT NULL,
+    payload TEXT NOT NULL,
+    processed BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP,
+    CONSTRAINT uk_booking_payment
+    UNIQUE (booking_id, payment_id)
+    );
+
+CREATE TABLE IF NOT EXISTS booking_compensation_outbox (
+    id VARCHAR(100) PRIMARY KEY,
+    booking_id VARCHAR(100) NOT NULL,
+    payment_id VARCHAR(100) NOT NULL,
+    event_type VARCHAR(50) NOT NULL,
+    topic VARCHAR(100) NOT NULL,
+    payload TEXT NOT NULL,
+    processed BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP,
+    CONSTRAINT uk_booking_payment
+    UNIQUE (booking_id, payment_id)
+    );

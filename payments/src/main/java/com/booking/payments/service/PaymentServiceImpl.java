@@ -6,6 +6,7 @@ import com.booking.payments.entity.PaymentEntity;
 import com.booking.payments.repository.PaymentsRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import lombok.AllArgsConstructor;
+import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,6 +31,7 @@ public class PaymentServiceImpl implements PaymentService{
         }
 
         String paymentStatus = paymentEntityOptional.get().getPaymentStatus();
+        System.out.println("payment Status:"+paymentStatus);
 
         if(!paymentStatus.equalsIgnoreCase(PaymentsConstants.PAYMENT_INITIATED)){
             return;
@@ -47,13 +49,9 @@ public class PaymentServiceImpl implements PaymentService{
         processingDto.setPaymentStatus(paymentEntity.getPaymentStatus());
 
         try {
-
             paymentOutboxService.publishPaymentSuccessEvent(processingDto);
-
         }catch(JsonProcessingException e){
-
             throw new IllegalStateException(" ");
-
         }
 
     }
@@ -94,6 +92,22 @@ public class PaymentServiceImpl implements PaymentService{
             throw new IllegalStateException(" ");
 
         }
+
+    }
+
+    @Override
+    @Transactional
+    @KafkaListener(topics = PaymentsConstants.BOOKING_FAILED_TOPIC)
+    public void processFailedBookingEvent(ProcessingDto processingDto) {
+
+        Optional<PaymentEntity> paymentEntityOptional = paymentsRepository.findById(processingDto.getPaymentId());
+
+        PaymentEntity paymentEntity = paymentEntityOptional.get();
+
+        paymentEntity.setPaymentStatus(PaymentsConstants.PAYMENT_REFUNDED);
+
+        paymentsRepository.save(paymentEntity);
+        //Notification
 
     }
 }

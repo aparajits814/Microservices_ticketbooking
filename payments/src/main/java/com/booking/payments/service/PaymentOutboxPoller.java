@@ -27,49 +27,34 @@ public class PaymentOutboxPoller {
     public void publishOutbox(){
 
         List<PaymentPollerEntity> paymentPollerEntities =  paymentPollerRepository.findByProcessed(false);
-
-
-
         for(PaymentPollerEntity paymentPollerEntity : paymentPollerEntities){
             ProcessingDto processingDto;
-
             try {
-
                 processingDto = objectMapper.readValue(paymentPollerEntity.getPayload(), ProcessingDto.class);
-
             }catch(JsonProcessingException e){
-
                 continue;
-
             }
 
             kafkaTemplate.send(paymentPollerEntity.getTopic(),processingDto)
                     .whenComplete((result,exception)->{
 
                         ProcessingDto processingDtoPublished = result.getProducerRecord().value();
-
                         Optional<PaymentPollerEntity> paymentPollerEntityOptional = paymentPollerRepository.
                                 findByPaymentIdAndBookingId(processingDtoPublished.getPaymentId(), processingDto.getBookingId());
 
                         if(exception == null){
-
                             if(paymentPollerEntityOptional.isPresent()){
 
                                 PaymentPollerEntity paymentPollerEntityToUpdate = paymentPollerEntityOptional.get();
-
                                 paymentPollerEntityToUpdate.setProcessed(true);
-
                                 paymentPollerRepository.save(paymentPollerEntityToUpdate);
 
                             }
 
                         }
                     });
-
         }
 
-
     }
-
 
 }

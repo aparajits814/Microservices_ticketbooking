@@ -12,4 +12,6 @@ public interface ShowSeatRepository extends JpaRepository<ShowSeatEntity, ShowSe
 
     List<ShowSeatEntity> findByShowId(String showId);
 
+    List<ShowSeatEntity> findByLockedByBookingId(String bookingId);
+
 }

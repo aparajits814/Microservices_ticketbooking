@@ -49,6 +49,10 @@ public class PaymentWebhookServiceImpl implements PaymentWebhookService{
 
     private void handleCheckoutExpired(Event event){
 
+        Session session = extractCheckoutSession(event);
+
+        paymentService.paymentExpired(session.getId());
+
     }
 
     private Session extractCheckoutSession(Event event) {
