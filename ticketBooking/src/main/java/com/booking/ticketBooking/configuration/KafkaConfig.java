@@ -16,7 +16,9 @@ public class KafkaConfig {
     public KafkaAdmin.NewTopics bookingTopics() {
         return new KafkaAdmin.NewTopics(
                 createTopic(BookingConstants.BOOKING_SUCCESS_TOPIC),
-                createTopic(BookingConstants.BOOKING_FAILED_TOPIC)
+                createTopic(BookingConstants.BOOKING_FAILED_TOPIC),
+                createTopic(BookingConstants.SEAT_RELEASE_TOPIC)
+
         );
     }
 

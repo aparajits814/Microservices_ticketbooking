@@ -22,6 +22,7 @@ public class BookingConstants {
     public static final String BOOKING_FAILED_TOPIC = "booking-fail";
     public static final String SEAT_CONFIRMED_TOPIC = "seat-confirm";
     public static final String SEAT_FAILED_TOPIC = "seat-fail";
+    public static final String SEAT_RELEASE_TOPIC = "seat-release";
 
 
 }

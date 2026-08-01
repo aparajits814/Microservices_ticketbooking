@@ -1,9 +1,7 @@
 package com.booking.ticketBooking.service;
 
 import com.booking.ticketBooking.dto.ProcessingDto;
-import com.booking.ticketBooking.entity.BookingCompensationOutboxEntity;
 import com.booking.ticketBooking.entity.BookingSeatOutboxEntity;
-import com.booking.ticketBooking.repository.BookingCompensationOutboxRepository;
 import com.booking.ticketBooking.repository.BookingSeatOutboxRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -23,12 +21,10 @@ public class BookingOutboxPoller {
 
     private BookingSeatOutboxRepository bookingSeatOutboxRepository;
 
-    private BookingCompensationOutboxRepository bookingCompensationOutboxRepository;
-
     private ObjectMapper objectMapper;
 
     @Scheduled(fixedDelay = 500)
-    public void publishSuccessOutbox(){
+    public void publishOutbox(){
 
         List<BookingSeatOutboxEntity> bookingSeatEntities =  bookingSeatOutboxRepository.findByProcessed(false);
         for(BookingSeatOutboxEntity bookingSeatOutboxEntity : bookingSeatEntities){
@@ -44,7 +40,8 @@ public class BookingOutboxPoller {
 
                         ProcessingDto processingDtoPublished = result.getProducerRecord().value();
                         Optional<BookingSeatOutboxEntity> bookingSeatOutboxEntityOptional = bookingSeatOutboxRepository.
-                                findByPaymentIdAndBookingId(processingDtoPublished.getPaymentId(), processingDtoPublished.getBookingId());
+                                findByPaymentIdAndBookingIdAndEventType(processingDtoPublished.getPaymentId(),
+                                        processingDtoPublished.getBookingId(), processingDtoPublished.getEventType());
 
                         if(exception == null){
                             if(bookingSeatOutboxEntityOptional.isPresent()){
@@ -56,43 +53,6 @@ public class BookingOutboxPoller {
 
                             }
 
-                        }
-                    });
-
-        }
-
-
-    }
-
-    @Scheduled(fixedDelay = 2000)
-    public void publishFailureOutbox(){
-
-        List<BookingCompensationOutboxEntity> bookingCompensationOutboxEntities =  bookingCompensationOutboxRepository.findByProcessed(false);
-
-        for(BookingCompensationOutboxEntity bookingCompensationOutboxEntity : bookingCompensationOutboxEntities){
-            ProcessingDto processingDto;
-            try {
-                processingDto = objectMapper.readValue(bookingCompensationOutboxEntity.getPayload(), ProcessingDto.class);
-            }catch(JsonProcessingException e){
-                continue;
-            }
-
-            kafkaTemplate.send(bookingCompensationOutboxEntity.getTopic(),processingDto)
-                    .whenComplete((result,exception)->{
-
-                        ProcessingDto processingDtoPublished = result.getProducerRecord().value();
-                        Optional<BookingCompensationOutboxEntity> bookingCompensationOutboxEntityOptional = bookingCompensationOutboxRepository.
-                                findByPaymentIdAndBookingId(processingDtoPublished.getPaymentId(), processingDtoPublished.getBookingId());
-
-                        if(exception == null){
-                            if(bookingCompensationOutboxEntityOptional.isPresent()){
-
-                                BookingCompensationOutboxEntity bookingCompensationOutboxUpdated = bookingCompensationOutboxEntityOptional.get();
-                                bookingCompensationOutboxUpdated.setProcessed(true);
-                                bookingCompensationOutboxRepository.save(bookingCompensationOutboxUpdated);
-                                System.out.println("Booking failed processed"+processingDtoPublished.getBookingId());
-
-                            }
                         }
                     });
 

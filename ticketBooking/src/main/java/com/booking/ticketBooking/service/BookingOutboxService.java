@@ -2,11 +2,11 @@ package com.booking.ticketBooking.service;
 
 import com.booking.ticketBooking.dto.ProcessingDto;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import org.springframework.dao.DataIntegrityViolationException;
 
 public interface BookingOutboxService {
 
-    void publishBookingSuccessEvent(ProcessingDto processingDto, String eventType) throws JsonProcessingException;
+    void publishEvent(ProcessingDto processingDto, String eventType, String topic) throws IllegalStateException, DataIntegrityViolationException;
 
-    void publishBookingFailedEvent(ProcessingDto processingDto, String eventType) throws JsonProcessingException;
 
 }

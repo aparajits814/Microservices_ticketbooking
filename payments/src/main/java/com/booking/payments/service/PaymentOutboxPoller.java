@@ -40,7 +40,8 @@ public class PaymentOutboxPoller {
 
                         ProcessingDto processingDtoPublished = result.getProducerRecord().value();
                         Optional<PaymentPollerEntity> paymentPollerEntityOptional = paymentPollerRepository.
-                                findByPaymentIdAndBookingId(processingDtoPublished.getPaymentId(), processingDto.getBookingId());
+                                findByPaymentIdAndBookingIdAndEventType(processingDtoPublished.getPaymentId(),
+                                        processingDtoPublished.getBookingId(), processingDtoPublished.getEventType());
 
                         if(exception == null){
                             if(paymentPollerEntityOptional.isPresent()){

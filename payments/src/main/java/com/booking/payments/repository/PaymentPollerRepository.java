@@ -10,11 +10,9 @@ import java.util.Optional;
 @Repository
 public interface PaymentPollerRepository extends JpaRepository<PaymentPollerEntity,String> {
 
-    boolean existsByPaymentIdAndBookingId(String paymentId,String bookingId);
-
     List<PaymentPollerEntity> findByProcessed(boolean processed);
 
-    Optional<PaymentPollerEntity> findByPaymentIdAndBookingId(String paymentId,String bookingId);
+    Optional<PaymentPollerEntity> findByPaymentIdAndBookingIdAndEventType(String paymentId,String bookingId, String eventType);
 
 
 }

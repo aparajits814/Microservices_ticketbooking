@@ -10,10 +10,9 @@ import java.util.Optional;
 @Repository
 public interface ShowSeatOutboxRepository extends JpaRepository<ShowSeatOutboxEntity,String> {
 
-    boolean existsByBookingIdAndPaymentId(String bookingId,String paymentId);
 
     List<ShowSeatOutboxEntity> findByProcessed(boolean processed);
 
-    Optional<ShowSeatOutboxEntity> findByPaymentIdAndBookingId(String paymentId, String bookingId);
+    Optional<ShowSeatOutboxEntity> findByPaymentIdAndBookingIdAndEventType(String paymentId, String bookingId, String eventType);
 
 }

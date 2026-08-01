@@ -2,7 +2,9 @@ package com.booking.payments.service;
 
 import com.booking.payments.constants.PaymentsConstants;
 import com.booking.payments.dto.ProcessingDto;
+import com.booking.payments.entity.IdempotencyEntity;
 import com.booking.payments.entity.PaymentEntity;
+import com.booking.payments.repository.IdempotencyRepository;
 import com.booking.payments.repository.PaymentsRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import lombok.AllArgsConstructor;
@@ -19,6 +21,8 @@ public class PaymentServiceImpl implements PaymentService{
     private PaymentsRepository paymentsRepository;
 
     private PaymentOutboxService paymentOutboxService;
+
+    private IdempotencyRepository idempotencyRepository;
 
     @Override
     @Transactional
@@ -46,13 +50,9 @@ public class PaymentServiceImpl implements PaymentService{
         ProcessingDto processingDto = new ProcessingDto();
         processingDto.setBookingId(paymentEntity.getBookingId());
         processingDto.setPaymentId(paymentEntity.getPaymentId());
-        processingDto.setPaymentStatus(paymentEntity.getPaymentStatus());
+        processingDto.setEventType(PaymentsConstants.PAYMENT_SUCCESS_TOPIC);
 
-        try {
-            paymentOutboxService.publishPaymentSuccessEvent(processingDto);
-        }catch(JsonProcessingException e){
-            throw new IllegalStateException(" ");
-        }
+        paymentOutboxService.publishEvent(processingDto,PaymentsConstants.PAYMENT_SUCCESS_TOPIC, PaymentsConstants.PAYMENT_SUCCESS_TOPIC);
 
     }
 
@@ -81,17 +81,9 @@ public class PaymentServiceImpl implements PaymentService{
         ProcessingDto processingDto = new ProcessingDto();
         processingDto.setBookingId(paymentEntity.getBookingId());
         processingDto.setPaymentId(paymentEntity.getPaymentId());
-        processingDto.setPaymentStatus(paymentEntity.getPaymentStatus());
+        processingDto.setEventType(PaymentsConstants.PAYMENT_EXPIRE_TOPIC);
 
-        try {
-
-            paymentOutboxService.publishPaymentExpiredEvent(processingDto);
-
-        }catch(JsonProcessingException e){
-
-            throw new IllegalStateException(" ");
-
-        }
+        paymentOutboxService.publishEvent(processingDto, PaymentsConstants.PAYMENT_EXPIRE_TOPIC, PaymentsConstants.PAYMENT_EXPIRE_TOPIC);
 
     }
 
@@ -99,6 +91,14 @@ public class PaymentServiceImpl implements PaymentService{
     @Transactional
     @KafkaListener(topics = PaymentsConstants.BOOKING_FAILED_TOPIC)
     public void processFailedBookingEvent(ProcessingDto processingDto) {
+
+        IdempotencyEntity idempotencyEntity = new IdempotencyEntity();
+
+        idempotencyEntity.setBookingId(processingDto.getBookingId());
+        idempotencyEntity.setPaymentId(processingDto.getPaymentId());
+        idempotencyEntity.setEventType(processingDto.getEventType());
+
+        idempotencyRepository.save(idempotencyEntity);
 
         Optional<PaymentEntity> paymentEntityOptional = paymentsRepository.findById(processingDto.getPaymentId());
 

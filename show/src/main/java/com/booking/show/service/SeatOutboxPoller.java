@@ -40,7 +40,8 @@ public class SeatOutboxPoller {
 
                         ProcessingDto processingDtoPublished = result.getProducerRecord().value();
                         Optional<ShowSeatOutboxEntity> bookingSeatOutboxEntityOptional = showSeatOutboxRepository.
-                                findByPaymentIdAndBookingId(processingDtoPublished.getPaymentId(), processingDtoPublished.getBookingId());
+                                findByPaymentIdAndBookingIdAndEventType(processingDtoPublished.getPaymentId(),
+                                        processingDtoPublished.getBookingId(), processingDtoPublished.getEventType());
 
                         if(exception == null){
                             if(bookingSeatOutboxEntityOptional.isPresent()){

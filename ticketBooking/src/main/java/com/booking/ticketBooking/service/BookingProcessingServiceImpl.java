@@ -3,7 +3,9 @@ package com.booking.ticketBooking.service;
 import com.booking.ticketBooking.constants.BookingConstants;
 import com.booking.ticketBooking.dto.ProcessingDto;
 import com.booking.ticketBooking.entity.BookingEntity;
+import com.booking.ticketBooking.entity.IdempotencyEntity;
 import com.booking.ticketBooking.repository.BookingRepository;
+import com.booking.ticketBooking.repository.IdempotencyRepository;
 import lombok.AllArgsConstructor;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Service;
@@ -20,28 +22,22 @@ public class BookingProcessingServiceImpl implements BookingProcessingService {
 
     private BookingOutboxService bookingOutboxService;
 
+    private IdempotencyRepository idempotencyRepository;
+
     @Override
-    @KafkaListener(topics = BookingConstants.PAYMENT_SUCCESS_TOPIC)
     @Transactional
     public void processPaymentSuccessEvent(ProcessingDto processingDto) {
 
-        try {
-            bookingOutboxService.publishBookingSuccessEvent(processingDto, BookingConstants.BOOKING_PENDING_CONFIRMATION_EVENT);
-        }catch(Exception e){
-            return;
-        }
+        saveProcessedEvent(processingDto);
+
+        processingDto.setEventType(BookingConstants.BOOKING_SUCCESS_TOPIC);
+        bookingOutboxService.publishEvent(processingDto, BookingConstants.BOOKING_SUCCESS_TOPIC, BookingConstants.BOOKING_SUCCESS_TOPIC);
 
         Optional<BookingEntity> bookingEntityOptional = bookingRepository.findById(processingDto.getBookingId());
 
         if(bookingEntityOptional.isEmpty()) {
-            try {
-                bookingOutboxService.publishBookingFailedEvent(processingDto, BookingConstants.BOOKING_NOT_EXISTS_EVENT);
-            } catch (Exception e) {
-
-                return;
-
-            }
-
+            processingDto.setEventType(BookingConstants.BOOKING_FAILED_TOPIC);
+            bookingOutboxService.publishEvent(processingDto, BookingConstants.BOOKING_FAILED_TOPIC, BookingConstants.BOOKING_FAILED_TOPIC);
             return;
         }
 
@@ -49,7 +45,7 @@ public class BookingProcessingServiceImpl implements BookingProcessingService {
         System.out.println("Booking status="+bookingEntity.getBookingStatus());
 
         if(!bookingEntity.getBookingStatus().equalsIgnoreCase(BookingConstants.BOOKING_STATUS_PENDING)){
-            return;
+            throw new IllegalStateException();
         }
 
         if(bookingEntity.getPaymentId()!=null){
@@ -66,29 +62,23 @@ public class BookingProcessingServiceImpl implements BookingProcessingService {
     }
 
     @Override
-    @KafkaListener(topics = BookingConstants.PAYMENT_EXPIRE_TOPIC)
     @Transactional
     public void processPaymentExpiredEvent(ProcessingDto processingDto) {
+
+        saveProcessedEvent(processingDto);
 
         Optional<BookingEntity> bookingEntityOptional = bookingRepository.findById(processingDto.getBookingId());
 
         if(bookingEntityOptional.isEmpty()) {
-
-            try {
-
-                bookingOutboxService.publishBookingFailedEvent(processingDto, BookingConstants.BOOKING_NOT_EXISTS_EVENT);
-
-            }catch (Exception e){
-
-            }
-
+            processingDto.setEventType(BookingConstants.SEAT_RELEASE_TOPIC);
+            bookingOutboxService.publishEvent(processingDto, BookingConstants.SEAT_RELEASE_TOPIC, BookingConstants.SEAT_RELEASE_TOPIC);
             return;
         }
 
         BookingEntity bookingEntity = bookingEntityOptional.get();
 
         if(!bookingEntity.getBookingStatus().equalsIgnoreCase(BookingConstants.BOOKING_STATUS_PENDING)){
-            return;
+            throw new IllegalStateException();
         }
 
         if(bookingEntity.getPaymentId()!=null){
@@ -97,21 +87,19 @@ public class BookingProcessingServiceImpl implements BookingProcessingService {
 
         bookingEntity.setUpdatedAt(LocalDateTime.now());
         bookingEntity.setPaymentId(processingDto.getPaymentId());
-        bookingEntity.setBookingStatus(BookingConstants.BOOKING_STATUS_PENDING_CONFIRMATION);
+        bookingEntity.setBookingStatus(BookingConstants.BOOKING_STATUS_FAILED);
 
         bookingRepository.save(bookingEntity);
-        try {
-            bookingOutboxService.publishBookingSuccessEvent(processingDto, BookingConstants.BOOKING_PENDING_CONFIRMATION_EVENT);
-        }catch(Exception e){
-
-        }
+        processingDto.setEventType(BookingConstants.SEAT_RELEASE_TOPIC);
+        bookingOutboxService.publishEvent(processingDto, BookingConstants.SEAT_RELEASE_TOPIC, BookingConstants.SEAT_RELEASE_TOPIC);
 
     }
 
     @Override
     @Transactional
-    @KafkaListener(topics = BookingConstants.SEAT_CONFIRMED_TOPIC)
     public void processSeatConfirmedEvent(ProcessingDto processingDto) {
+
+        saveProcessedEvent(processingDto);
 
         Optional<BookingEntity> bookingEntityOptional = bookingRepository.findById(processingDto.getBookingId());
 
@@ -126,8 +114,9 @@ public class BookingProcessingServiceImpl implements BookingProcessingService {
 
     @Override
     @Transactional
-    @KafkaListener(topics = BookingConstants.SEAT_FAILED_TOPIC)
     public void processSeatFailedEvent(ProcessingDto processingDto) {
+
+        saveProcessedEvent(processingDto);
 
         Optional<BookingEntity> bookingEntityOptional = bookingRepository.findById(processingDto.getBookingId());
 
@@ -136,13 +125,16 @@ public class BookingProcessingServiceImpl implements BookingProcessingService {
         bookingEntity.setBookingStatus(BookingConstants.BOOKING_STATUS_FAILED);
         bookingEntity.setUpdatedAt(LocalDateTime.now());
         bookingRepository.save(bookingEntity);
+        processingDto.setEventType(BookingConstants.BOOKING_FAILED_TOPIC);
+        bookingOutboxService.publishEvent(processingDto, BookingConstants.BOOKING_FAILED_TOPIC, BookingConstants.BOOKING_FAILED_TOPIC);
+    }
 
-        try {
-            bookingOutboxService.publishBookingFailedEvent(processingDto, BookingConstants.BOOKING_PENDING_CONFIRMATION_EVENT);
-        }catch (Exception e){
+    private void saveProcessedEvent(ProcessingDto processingDto){
+        IdempotencyEntity idempotencyEntity = new IdempotencyEntity();
+        idempotencyEntity.setBookingId(processingDto.getBookingId());
+        idempotencyEntity.setPaymentId(processingDto.getPaymentId());
+        idempotencyEntity.setEventType(processingDto.getEventType());
 
-        }
-
-
+        idempotencyRepository.save(idempotencyEntity);
     }
 }

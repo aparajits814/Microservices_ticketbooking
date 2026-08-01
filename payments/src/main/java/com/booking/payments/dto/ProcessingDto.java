@@ -15,6 +15,6 @@ public class ProcessingDto {
 
     private String paymentId;
 
-    private String paymentStatus;
+    private String eventType;
 
 }

@@ -7,6 +7,7 @@ import com.booking.payments.repository.PaymentPollerRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.AllArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,47 +23,21 @@ public class PaymentOutboxServiceImpl implements PaymentOutboxService{
 
 
     @Override
-    @Transactional
-    public void publishPaymentSuccessEvent(ProcessingDto processingDto) throws JsonProcessingException {
-
-        boolean exists = paymentPollerRepository.existsByPaymentIdAndBookingId(processingDto.getPaymentId(), processingDto.getBookingId());
-
-        if(exists){
-            return;
-        }
+    public void publishEvent(ProcessingDto processingDto, String eventType, String topic) throws IllegalStateException, DataIntegrityViolationException {
 
         PaymentPollerEntity paymentPollerEntity = new PaymentPollerEntity();
-        paymentPollerEntity.setEventType(PaymentsConstants.PAYMENT_CONFIRMED);
+        paymentPollerEntity.setEventType(eventType);
         paymentPollerEntity.setPaymentId(processingDto.getPaymentId());
         paymentPollerEntity.setBookingId(processingDto.getBookingId());
         paymentPollerEntity.setProcessed(false);
-        paymentPollerEntity.setTopic(PaymentsConstants.PAYMENT_SUCCESS_TOPIC);
-        paymentPollerEntity.setPayload(objectMapper.writeValueAsString(processingDto));
-        paymentPollerEntity.setCreatedAt(LocalDateTime.now());
-
-        paymentPollerRepository.save(paymentPollerEntity);
-
-    }
-
-    @Override
-    @Transactional
-    public void publishPaymentExpiredEvent(ProcessingDto processingDto) throws JsonProcessingException {
-
-        boolean exists = paymentPollerRepository.existsByPaymentIdAndBookingId(processingDto.getPaymentId(), processingDto.getBookingId());
-
-        if(exists){
-            return;
+        paymentPollerEntity.setTopic(topic);
+        try {
+            paymentPollerEntity.setPayload(objectMapper.writeValueAsString(processingDto));
+        }catch(JsonProcessingException e){
+            throw new IllegalStateException();
         }
-        PaymentPollerEntity paymentPollerEntity = new PaymentPollerEntity();
-        paymentPollerEntity.setEventType(PaymentsConstants.PAYMENT_FAILED);
-        paymentPollerEntity.setPaymentId(processingDto.getPaymentId());
-        paymentPollerEntity.setBookingId(processingDto.getBookingId());
-        paymentPollerEntity.setProcessed(false);
-        paymentPollerEntity.setTopic(PaymentsConstants.PAYMENT_EXPIRE_TOPIC);
-        paymentPollerEntity.setPayload(objectMapper.writeValueAsString(processingDto));
         paymentPollerEntity.setCreatedAt(LocalDateTime.now());
 
         paymentPollerRepository.save(paymentPollerEntity);
-
     }
 }
