@@ -55,6 +55,8 @@ flowchart LR
     Movie --> Redis
 
     Show --> ShowDB
+    Show --> Movie
+    Show --> Redis
     Booking --> BookingDB
     Payment --> PaymentDB
 
@@ -190,16 +192,12 @@ sequenceDiagram
     alt Seats available
         Show-->>Booking: Seats locked
         Booking->>Booking: Save pending booking
-        Booking->>Payment: Create payment session
-        Payment->>Stripe: Create Checkout Session
-        Stripe-->>Payment: Checkout URL
-        Payment-->>Booking: Payment details
-        Booking-->>User: Booking ID and checkout URL
     else Seats unavailable
         Show-->>Booking: Seat-lock failure
         Booking-->>User: Booking rejected
     end
-
+    User->>Payment: Create Checkout
+    Payment->>Stripe: Create Checkout Session
     User->>Stripe: Complete payment
     Stripe->>Payment: Webhook event
     Payment->>Payment: Update payment and save outbox event
