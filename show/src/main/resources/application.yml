@@ -1,6 +1,6 @@
 spring:
   application:
-    name: "show"
+    name: "shows"
   datasource:
     url: jdbc:mysql://localhost:3307/showsdb
     username: root
@@ -36,6 +36,25 @@ spring:
         spring.json.value.default.type: com.booking.show.dto.ProcessingDto
     admin:
       auto-create: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"
+  health:
+    readiness-state:
+      enabled: true
+    liveness-state:
+      enabled: true
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
 eureka:
   instance:
     preferIpAddress: true

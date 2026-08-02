@@ -11,7 +11,7 @@ spring:
     init:
       mode: always
   jpa:
-    show-sql: true
+    show-sql: false
   Kafka:
     bootstrap-servers: localhost:9092
 
@@ -35,7 +35,6 @@ spring:
     admin:
       auto-create: true
 
-
 eureka:
   instance:
     preferIpAddress: true
@@ -45,8 +44,26 @@ eureka:
     serviceUrl:
       defaultZone: http://localhost:8070/eureka
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"
+  health:
+    readiness-state:
+      enabled: true
+    liveness-state:
+      enabled: true
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
 stripe:
-  api-key: ${API_KEY}
-  webhook-key : ${WEBHOOK_KEY}
+  api-key: ${STRIPE_API_KEY}
+  webhook-key : ${STRIPE_WEBHOOK_KEY}
   success-url: http://localhost:9071/api/paymentSuccess?session_id={CHECKOUT_SESSION_ID}
   cancel-url: http://localhost:9071/api/paymentCancel?session_id={CHECKOUT_SESSION_ID}

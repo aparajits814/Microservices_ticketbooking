@@ -30,7 +30,7 @@ public class GatewayserverApplication {
 								.filters(f -> f.rewritePath("/banking/show/(?<segment>.*)","/${segment}")
 										.requestRateLimiter(config -> config.setRateLimiter(redisRateLimiter())
 												.setKeyResolver(keyResolver())))
-				).uri("lb://show"))
+				).uri("lb://SHOW"))
 				.route( p -> (
 						p.path("/booking/payments/**")
 								.filters(f -> f.rewritePath("/banking/payments/(?<segment>.*)","/${segment}")
