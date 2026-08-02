@@ -162,7 +162,7 @@ Duplicate Kafka deliveries therefore do not apply the same business transition m
 | Service Registry     | Service registration and discovery using Eureka                 |
 | Movie Service        | Movie, language, and genre management                           |
 | Show Service         | Theatre, screen, show, seat-pricing, and seat-lock management   |
-| Booking Service      | Booking creation, booking lifecycle                             |
+| Booking Service      | Booking creation, booking lifecycle, and Saga coordination      |
 | Payment Service      | Stripe Checkout, webhook processing, and payment events         |
 | Notification Service | Customer notifications triggered by booking events              |
 | Outbox Poller        | Publishes pending database outbox events to Kafka               |
@@ -228,7 +228,7 @@ PENDING
    |
    +---- Payment Failed --------> FAILED
    |
-   +---- Payment Expired -------> FALED
+   +---- Payment Expired -------> EXPIRED
 ```
 
 A booking is not considered confirmed only because the user reaches the Stripe success URL. The final payment state is determined using a verified Stripe webhook.
@@ -270,7 +270,7 @@ Example compensating actions include:
 * Release seats when payment expires
 * Mark a booking as failed when payment cannot be completed
 * Ignore duplicate payment events
-* Mark booking as success and seat as confirmed for a payment success event
+* Reconcile an already successful payment when booking confirmation temporarily fails
 
 ### Optimistic and Pessimistic Concurrency Control
 
@@ -310,6 +310,7 @@ Events that continue to fail are sent to a Dead Letter Topic for investigation o
 * Spring Cloud OpenFeign
 * Spring Cloud Netflix Eureka
 * Spring Kafka
+* Spring Security
 
 ### Databases and Caching
 
@@ -337,9 +338,8 @@ Events that continue to fail are sent to a Dead Letter Topic for investigation o
 * Spring Boot Actuator
 * Prometheus
 * Grafana
-* Loki
+* Tempo
 * OpenTelemetry
-
 
 ---
 
@@ -469,7 +469,7 @@ Restart the Payment Service after changing the environment variable.
 
 ### Important Stripe Events
 
-The Payment Service processes events:
+The Payment Service processes events such as:
 
 ```text
 checkout.session.completed
@@ -478,15 +478,19 @@ checkout.session.expired
 
 The exact payment event set can be extended according to the payment methods supported by the system.
 
+
 ---
 
 ## Kafka Events
+
+### Kafka Topics
 
 ```text
 payment-success
 payment-expire
 booking-confirm
 booking-fail
+seat=confirm
 seat-fail
 seat-release
 seat-confirm
@@ -517,7 +521,6 @@ A typical outbox record contains:
 
 ```text
 id
-aggregateId
 bookingId
 paymentId
 eventType
@@ -722,4 +725,3 @@ Java Backend Developer focused on:
 
 This project is available for educational and demonstration purposes.
 
-Add an appropriate open-source license, such as the MIT License, before distributing or accepting external contributions.
