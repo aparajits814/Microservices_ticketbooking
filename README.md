@@ -14,7 +14,7 @@ The system follows a microservices architecture and demonstrates practical backe
 * Service discovery
 * Distributed caching
 * Retry and Dead Letter Queue handling
-* Monitoring and centralized logging
+* Monitoring and Tracing
 
 > This project is being developed as a backend system-design and microservices implementation project.
 
@@ -61,7 +61,7 @@ flowchart LR
     Payment --> PaymentDB
 
     Booking --> Show
-    Booking --> Payment
+    Payment --> Booking
 
     Payment --> Stripe
     Stripe --> Payment
