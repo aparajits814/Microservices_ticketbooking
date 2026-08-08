@@ -1,22 +1,22 @@
 # Distributed Event-Driven Ticket Booking System
 
-A scalable, distributed ticket-booking platform built using **Java, Spring Boot, Kafka, MySQL, Redis, Docker, and Stripe**.
+A distributed ticket-booking backend built with **Java, Spring Boot, Kafka, MySQL, Redis, Docker, and Stripe**.
 
-The system follows a microservices architecture and demonstrates practical backend engineering concepts such as:
+The project focuses on practical backend and distributed-systems problems rather than only CRUD APIs. It currently demonstrates:
 
-* Concurrent seat locking
-* Event-driven communication
-* Saga-based transaction management
+* Concurrent seat locking with optimistic locking
+* Event-driven communication with Apache Kafka
+* Saga-based booking coordination and compensation
 * Transactional Outbox Pattern
-* Consumer idempotency
-* Payment processing with Stripe
-* Centralized API routing
-* Service discovery
-* Distributed caching
-* Retry and Dead Letter Queue handling
-* Monitoring and Tracing
+* Idempotent event consumption
+* Stripe Checkout and webhook-driven payment confirmation
+* Real Stripe refund compensation for failed bookings
+* Database-per-service ownership
+* Eureka service discovery and API Gateway routing
+* Redis caching
+* Prometheus and Grafana monitoring
 
-> This project is being developed as a backend system-design and microservices implementation project.
+> This is a system-design and microservices learning project. Automated testing and distributed tracing are the current major areas of improvement.
 
 ---
 
@@ -33,16 +33,18 @@ flowchart LR
     Show[Show Service]
     Booking[Booking Service]
     Payment[Payment Service]
-    Notification[Notification Service]
 
-    Redis[(Redis)]
     MovieDB[(Movie DB)]
     ShowDB[(Show DB)]
     BookingDB[(Booking DB)]
     PaymentDB[(Payment DB)]
+    Redis[(Redis)]
 
     Kafka[(Apache Kafka)]
-    Stripe[Stripe Checkout]
+    Stripe[Stripe Checkout / Refund API]
+
+    Prometheus[Prometheus]
+    Grafana[Grafana]
 
     Client --> Gateway
 
@@ -57,18 +59,28 @@ flowchart LR
     Show --> ShowDB
     Show --> Movie
     Show --> Redis
+
     Booking --> BookingDB
     Payment --> PaymentDB
 
-    Booking --> Show
-    Payment --> Booking
+    Booking -->|Seat lock request| Show
 
     Payment --> Stripe
-    Stripe --> Payment
+    Stripe -->|Webhook| Payment
 
     Payment --> Kafka
     Booking --> Kafka
-    Kafka --> Notification
+    Show --> Kafka
+
+    Kafka --> Booking
+    Kafka --> Show
+    Kafka --> Payment
+
+    Prometheus --> Movie
+    Prometheus --> Show
+    Prometheus --> Booking
+    Prometheus --> Payment
+    Grafana --> Prometheus
 
     Movie -.registers.-> Eureka
     Show -.registers.-> Eureka
@@ -76,6 +88,8 @@ flowchart LR
     Payment -.registers.-> Eureka
     Gateway -.discovers.-> Eureka
 ```
+
+The initial seat-lock request is synchronous because the user needs an immediate availability response. Payment confirmation and subsequent Saga transitions are propagated asynchronously through Kafka.
 
 ---
 
@@ -86,55 +100,167 @@ flowchart LR
 * Create, update, retrieve, and delete movies
 * Manage movie languages and genres
 * Cache frequently requested movie data using Redis
-* Automatically invalidate cached data after updates or deletion
+* Evict cached movie data after updates or deletion
 
 ### Theatre and Show Management
 
-* Manage theatres, screens, and seats
-* Configure seat categories and prices
-* Schedule movie shows
+* Manage theatres, screens, seats, and shows
+* Configure seat categories and show-specific prices
 * Prevent overlapping shows on the same screen
 * Maintain seat availability independently for every show
 
 ### Concurrent Seat Locking
 
-* Temporarily lock selected seats before payment
-* Configurable seat-lock expiration period
-* Prevent duplicate seats in a booking request
-* Validate that every requested seat belongs to the selected show
-* Prevent multiple users from booking the same seat concurrently
-* Automatically treat expired locks as available
-* Process seat locks in a deterministic order to reduce deadlock risk
+Selected seats are temporarily locked before payment.
 
-### Booking Management
+The locking flow includes:
 
-* Create bookings for one or more seats
-* Maintain booking lifecycle states
-* Associate bookings with users, shows, seats, and payments
-* Store the seat-lock expiry time
-* Confirm or fail bookings according to payment events
-* Execute compensating operations when a distributed step fails
+* Duplicate-seat validation within a request
+* Validation that requested seats belong to the selected show
+* Temporary `LOCKED` ownership using the booking ID
+* Lock-expiry timestamps
+* Optimistic locking using entity versioning
+* Deterministic seat processing order
+* Automatic release of expired locks
+* State guards preventing `BOOKED` seats from being released by the expiry workflow
 
-### Stripe Payment Integration
+```text
+AVAILABLE
+   |
+   +---- Seat selected ---------> LOCKED
+                                    |
+                                    +---- Confirmation ----> BOOKED
+                                    |
+                                    +---- Lock expires ----> AVAILABLE
+                                    |
+                                    +---- Saga failure ----> AVAILABLE
+```
+
+---
+
+## Booking Lifecycle
+
+The Booking Service coordinates the distributed booking workflow.
+
+Current booking states include:
+
+```text
+PENDING_PAYMENT
+      |
+      +---- Payment succeeded ----> PENDING_CONFIRMATION
+                                          |
+                                          +---- Seats confirmed ----> BOOKING_CONFIRMED
+                                          |
+                                          +---- Confirmation fails -> BOOKING_FAILED
+
+PENDING_PAYMENT
+      |
+      +---- Payment expires/fails ------------------------> BOOKING_FAILED
+```
+
+A booking is **not** confirmed because the browser reaches a Stripe success URL. Payment state is finalized from a verified Stripe webhook.
+
+---
+
+## Payment and Saga Flow
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant Booking as Booking Service
+    participant Show as Show Service
+    participant Payment as Payment Service
+    participant Stripe
+    participant Kafka
+
+    User->>Booking: Create booking
+    Booking->>Show: Lock selected seats
+
+    alt Seats available
+        Show-->>Booking: Lock successful
+        Booking->>Booking: Persist PENDING_PAYMENT booking
+    else Seats unavailable
+        Show-->>Booking: Lock rejected
+        Booking-->>User: Booking creation fails
+    end
+
+    User->>Payment: Create Checkout session
+    Payment->>Stripe: Create Checkout Session
+    Stripe-->>Payment: Checkout URL
+    Payment-->>User: Checkout URL
+
+    User->>Stripe: Complete payment
+    Stripe->>Payment: checkout.session.completed webhook
+    Payment->>Payment: Persist payment + PaymentIntent + outbox event
+    Payment->>Kafka: PAYMENT_SUCCESS
+    Kafka->>Booking: PAYMENT_SUCCESS
+
+    Booking->>Booking: PENDING_PAYMENT -> PENDING_CONFIRMATION
+    Booking->>Booking: Persist booking-confirm outbox event
+    Booking->>Kafka: BOOKING_CONFIRM
+    Kafka->>Show: BOOKING_CONFIRM
+
+    alt Seats still confirmable
+        Show->>Show: LOCKED -> BOOKED
+        Show->>Kafka: SEAT_CONFIRM
+        Kafka->>Booking: SEAT_CONFIRM
+        Booking->>Booking: -> BOOKING_CONFIRMED
+    else Seat confirmation fails
+        Show->>Kafka: SEAT_FAIL
+        Kafka->>Booking: SEAT_FAIL
+        Booking->>Booking: -> BOOKING_FAILED
+        Booking->>Kafka: BOOKING_FAIL
+        Kafka->>Payment: BOOKING_FAIL
+        Payment->>Stripe: Refund PaymentIntent
+        Stripe-->>Payment: Refund result
+        Payment->>Payment: -> REFUNDED
+    end
+```
+
+---
+
+## Stripe Payment Integration
+
+The Payment Service integrates with Stripe Checkout and treats Stripe webhooks as the authoritative payment signal.
+
+Implemented behaviour:
 
 * Create Stripe Checkout sessions
-* Redirect users to Stripe-hosted payment pages
-* Verify webhook signatures before processing events
-* Handle successful and expired checkout sessions
-* Keep payment confirmation independent of browser redirects
-* Associate every payment with its corresponding booking
+* Redirect the client to Stripe-hosted Checkout
+* Verify webhook signatures
+* Handle `checkout.session.completed`
+* Handle `checkout.session.expired`
+* Capture and persist the Stripe PaymentIntent ID after successful Checkout
+* Associate payments with bookings
+* Publish payment outcomes through the transactional outbox
 
-### Event-Driven Processing
+### Refund Compensation
 
-* Publish domain events through Apache Kafka
-* Use the booking ID as a Kafka message key where ordering is required
-* Retry transient processing failures
-* Forward repeatedly failing events to a Dead Letter Topic
-* Allow services to react asynchronously without tight runtime coupling
+If payment succeeds but the downstream booking/seat confirmation fails, the Saga triggers a real Stripe refund.
 
-### Transactional Outbox Pattern
+```text
+BOOKING_FAILED event
+        |
+        v
+Payment Service loads successful payment
+        |
+        v
+Stripe Refund API using stored PaymentIntent ID
+        |
+        v
+Refund succeeds
+        |
+        v
+Local payment state -> REFUNDED
+```
 
-Payment and booking events are first stored in the service database within the same transaction as the business-state change.
+Duplicate compensation events are guarded so the same logical payment is not refunded repeatedly by the application workflow.
+
+---
+
+## Transactional Outbox Pattern
+
+Business state changes and their corresponding domain events are stored in the same local database transaction.
 
 A background poller then:
 
@@ -142,157 +268,161 @@ A background poller then:
 2. Publishes them to Kafka
 3. Marks successfully published records as processed
 
-This prevents the database state from being committed without the corresponding event being recorded.
+```text
+Local transaction
+-----------------------------
+Update business state
+Insert outbox event
+-----------------------------
+          |
+        COMMIT
+          |
+          v
+     Outbox Poller
+          |
+          v
+        Kafka
+```
 
-### Idempotent Event Consumption
+This prevents the classic failure mode where a database update succeeds but the corresponding event is never recorded for publication.
 
-Consumers maintain an idempotency record using business identifiers such as:
+---
+
+## Idempotent Event Consumption
+
+Kafka and webhook deliveries may occur more than once.
+
+Consumers persist idempotency records using business identifiers such as:
 
 ```text
 bookingId + paymentId + eventType
 ```
 
-Duplicate Kafka deliveries therefore do not apply the same business transition multiple times.
+Unique database constraints and state-transition checks prevent duplicate deliveries from applying the same logical operation multiple times.
 
----
+This is especially important for:
 
-## Microservices
-
-| Service              | Responsibility                                                  |
-| -------------------- | --------------------------------------------------------------- |
-| API Gateway          | Central entry point, request routing, and cross-cutting filters |
-| Service Registry     | Service registration and discovery using Eureka                 |
-| Movie Service        | Movie, language, and genre management                           |
-| Show Service         | Theatre, screen, show, seat-pricing, and seat-lock management   |
-| Booking Service      | Booking creation, booking lifecycle, and Saga coordination      |
-| Payment Service      | Stripe Checkout, webhook processing, and payment events         |
-| Notification Service | Customer notifications triggered by booking events              |
-| Outbox Poller        | Publishes pending database outbox events to Kafka               |
-
-Each business service owns its own database and does not directly update another service's tables.
-
----
-
-## Booking Flow
-
-```mermaid
-sequenceDiagram
-    actor User
-    participant Gateway as API Gateway
-    participant Booking as Booking Service
-    participant Show as Show Service
-    participant Payment as Payment Service
-    participant Stripe
-    participant Kafka
-
-    User->>Gateway: Create booking
-    Gateway->>Booking: Booking request
-    Booking->>Show: Lock selected seats
-
-    alt Seats available
-        Show-->>Booking: Seats locked
-        Booking->>Booking: Save pending booking
-    else Seats unavailable
-        Show-->>Booking: Seat-lock failure
-        Booking-->>User: Booking rejected
-    end
-    User->>Payment: Create Checkout
-    Payment->>Stripe: Create Checkout Session
-    User->>Stripe: Complete payment
-    Stripe->>Payment: Webhook event
-    Payment->>Payment: Update payment and save outbox event
-    Payment->>Kafka: Publish payment event
-    Kafka->>Booking: Payment result
-
-    alt Payment successful
-        Booking->>Booking: Confirm booking
-        Booking->>Show: Confirm booked seats
-    else Payment expired or failed
-        Booking->>Booking: Mark booking failed
-        Booking->>Show: Release locked seats
-    end
-```
-
----
-
-## Booking States
-
-A booking can move through states similar to:
-
-```text
-PENDING
-   |
-   +---- Payment Successful ----> CONFIRMED
-   |
-   +---- Payment Failed --------> FAILED
-   |
-   +---- Payment Expired -------> EXPIRED
-```
-
-A booking is not considered confirmed only because the user reaches the Stripe success URL. The final payment state is determined using a verified Stripe webhook.
-
----
-
-## Seat States
-
-```text
-AVAILABLE
-   |
-   +---- Seat selected ---------> LOCKED
-   |                                 |
-   |                                 +---- Payment success ---> BOOKED
-   |                                 |
-   |                                 +---- Lock expires ------> AVAILABLE
-   |
-   +---- Booking cancelled -----> AVAILABLE
-```
-
-Each seat lock is associated with a booking and an expiration timestamp.
+* Payment-success processing
+* Booking confirmation
+* Seat confirmation/release
+* Refund compensation
 
 ---
 
 ## Reliability and Consistency
 
-### Database Transactions
+### Local Transactions
 
-Each service uses local database transactions for changes within its own boundary.
+Each service owns its own database and uses local ACID transactions inside its service boundary.
 
-A single distributed database transaction is intentionally avoided.
+The system intentionally avoids a distributed database transaction across Booking, Show, and Payment.
 
 ### Saga Pattern
 
-The booking workflow uses a Saga to coordinate operations across the Booking, Show, and Payment services.
+Cross-service consistency is maintained using events and compensating actions.
 
-Example compensating actions include:
+Examples:
 
-* Release seats when payment expires
-* Mark a booking as failed when payment cannot be completed
-* Ignore duplicate payment events
-* Reconcile an already successful payment when booking confirmation temporarily fails
+* Release locked seats when payment expires
+* Fail a booking when seat confirmation cannot complete
+* Refund an already successful Stripe payment when the booking cannot be completed
+* Ignore duplicate event deliveries through idempotency controls
 
-### Optimistic and Pessimistic Concurrency Control
+### Optimistic Concurrency Control
 
-Seat availability is verified and modified inside a database transaction.
+Seat entities use version-based optimistic locking so simultaneous requests cannot silently overwrite each other's state.
 
-Depending on the repository implementation, row-level locking or version-based optimistic locking can be used to ensure that two simultaneous requests cannot successfully lock the same seat.
+The core invariant is:
 
-### Idempotency
+> A seat may transition back to `AVAILABLE` only from a valid lock/release path. A `BOOKED` seat must not be released by the expiry poller.
 
-Operations that can be delivered more than once are designed to be idempotent.
+---
 
-Examples include:
+## Microservices
 
-* Stripe webhook handling
-* Kafka event consumption
-* Booking confirmation
-* Seat release
-* Outbox publication
+| Component       | Responsibility                                                      |
+| --------------- | ------------------------------------------------------------------- |
+| API Gateway     | Central entry point and service routing                             |
+| Eureka Server   | Service registration and discovery                                  |
+| Movie Service   | Movie, language, and genre management                               |
+| Show Service    | Theatre, screen, show, pricing, seat availability, and seat locking |
+| Booking Service | Booking creation, lifecycle management, and Saga coordination       |
+| Payment Service | Stripe Checkout, webhook handling, payment state, and refunds       |
+| Outbox Pollers  | Background publication of persisted domain events to Kafka          |
 
-### Retry and Dead Letter Queue
+Each business service owns its own database and does not directly update another service's tables.
 
-Transient Kafka consumer failures are retried with backoff.
+---
 
-Events that continue to fail are sent to a Dead Letter Topic for investigation or controlled replay.
+## Database Ownership
+
+```text
+Movie Service   -> moviesdb
+Show Service    -> showsdb
+Booking Service -> bookingsdb
+Payment Service -> paymentsdb
+```
+
+Services communicate through REST calls or Kafka events rather than sharing database tables.
+
+---
+
+## Kafka Events
+
+The current workflow uses topics including:
+
+```text
+payment-succeed
+payment-expire
+booking-confirm
+booking-fail
+seat-confirm
+seat-fail
+seat-release
+```
+
+Kafka is used for asynchronous Saga transitions between Payment, Booking, and Show services.
+
+> Retry/backoff and Dead Letter Topic handling are not currently presented as completed features of the project.
+
+---
+
+## Redis Caching
+
+Redis is used for frequently requested movie data.
+
+```text
+Request
+   |
+   +---- Cache hit ----> Return cached response
+   |
+   +---- Cache miss ---> Query MySQL
+                         Store in Redis
+                         Return response
+```
+
+Relevant cache entries are evicted when underlying movie data changes.
+
+---
+
+## Observability
+
+Currently implemented:
+
+* Spring Boot Actuator
+* Prometheus metrics collection
+* Grafana dashboards/data-source provisioning
+
+Common Actuator endpoints include:
+
+```text
+/actuator/health
+/actuator/info
+/actuator/metrics
+/actuator/prometheus
+```
+
+**OpenTelemetry + Tempo distributed tracing is planned next** so a single booking can be followed across synchronous REST calls and asynchronous Kafka Saga transitions.
 
 ---
 
@@ -300,7 +430,7 @@ Events that continue to fail are sent to a Dead Letter Topic for investigation o
 
 ### Backend
 
-* Java
+* Java 17+
 * Spring Boot
 * Spring Cloud
 * Spring Data JPA
@@ -308,9 +438,8 @@ Events that continue to fail are sent to a Dead Letter Topic for investigation o
 * Spring Cloud OpenFeign
 * Spring Cloud Netflix Eureka
 * Spring Kafka
-* Spring Security
 
-### Databases and Caching
+### Data
 
 * MySQL
 * Redis
@@ -323,272 +452,138 @@ Events that continue to fail are sent to a Dead Letter Topic for investigation o
 
 * Stripe Checkout
 * Stripe Webhooks
+* Stripe Refund API
 * Stripe CLI for local webhook forwarding
 
-### DevOps
+### Infrastructure and Observability
 
 * Docker
 * Docker Compose
 * Gradle
-
-### Observability
-
 * Spring Boot Actuator
 * Prometheus
 * Grafana
-* Tempo
-* OpenTelemetry
 
 ---
 
-## Prerequisites
+## Local Infrastructure
 
-Install the following tools before running the project:
+The current `docker-compose.yml` provides:
 
-* Java 17 or later
-* Docker
-* Docker Compose
-* Gradle, or use the included Gradle Wrapper
-* Stripe CLI for local payment webhook testing
+* Four MySQL databases
+* Redis
+* Kafka
+* Eureka Server
+* Movie Service
+* Show Service
+* Booking Service
+* Payment Service
+* Prometheus
+* Grafana
 
-Verify the installation:
-
-```bash
-java --version
-docker --version
-docker compose version
-```
-
----
-
-## Running the Project
-
-### 1. Clone the Repository
-
-```bash
-git clone https://github.com/<your-username>/<your-repository>.git
-cd <your-repository>
-```
-
-### 2. Configure Environment Variables
-
-Create a `.env` file in the project root:
-
-```env
-MYSQL_ROOT_PASSWORD=your_mysql_password
-
-STRIPE_API_KEY=sk_test_your_key
-STRIPE_WEBHOOK_SECRET=whsec_your_webhook_secret
-
-KEYCLOAK_ADMIN=admin
-KEYCLOAK_ADMIN_PASSWORD=admin
-```
-
-Never commit actual Stripe keys, database passwords, JWT secrets, or webhook secrets to Git.
-
-Add the following entries to `.gitignore`:
-
-```gitignore
-.env
-*.log
-.idea/
-build/
-.gradle/
-```
-
-### 3. Start Infrastructure
+Start the stack with:
 
 ```bash
 docker compose up -d
 ```
 
-Check the running containers:
+Check container status:
 
 ```bash
 docker compose ps
 ```
 
-### 4. Build the Services
+The API Gateway exists as a separate project module and can be run separately when required.
 
-On Linux or macOS:
+---
+
+## Building a Service
+
+Each service is maintained as its own Gradle project.
+
+Example on Linux/macOS:
 
 ```bash
+cd ticketBooking
 ./gradlew clean build
 ```
 
-On Windows:
+Example on Windows:
 
 ```powershell
+cd ticketBooking
 gradlew.bat clean build
 ```
 
-### 5. Run an Individual Service
-
-```bash
-./gradlew :booking-service:bootRun
-```
-
-Alternatively, run all services through Docker Compose:
-
-```bash
-docker compose up --build
-```
+Use the same pattern for `movie`, `show`, `payments`, `eurekaserver`, and `gatewayserver`.
 
 ---
 
-## Stripe Webhook Setup
+## Stripe Configuration
 
-Log in through the Stripe CLI:
+The Payment Service expects Stripe credentials through environment variables:
+
+```env
+STRIPE_API_KEY=sk_test_...
+STRIPE_WEBHOOK_KEY=whsec_...
+```
+
+Never commit real Stripe keys or webhook secrets.
+
+For local webhook forwarding:
 
 ```bash
 stripe login
+stripe listen --forward-to localhost:9071/api/webhook
 ```
 
-Forward Stripe events to the Payment Service:
-
-```bash
-stripe listen \
-  --forward-to localhost:9071/api/webhook
-```
-
-The CLI prints a webhook signing secret similar to:
-
-```text
-whsec_************************
-```
-
-Set this value as:
-
-```env
-STRIPE_WEBHOOK_SECRET=whsec_************************
-```
-
-Restart the Payment Service after changing the environment variable.
-
-### Important Stripe Events
-
-The Payment Service processes events such as:
-
-```text
-checkout.session.completed
-checkout.session.expired
-```
-
-The exact payment event set can be extended according to the payment methods supported by the system.
-
-
----
-
-## Kafka Events
-
-### Kafka Topics
-
-```text
-payment-success
-payment-expire
-booking-confirm
-booking-fail
-seat=confirm
-seat-fail
-seat-release
-seat-confirm
-```
-
-Topic names should be configurable through application properties instead of being hardcoded.
-
----
-
-## Database Ownership
-
-Each service owns its data.
-
-```text
-Movie Service   -> moviesdb
-Show Service    -> showsdb
-Booking Service -> bookingsdb
-Payment Service -> paymentsdb
-```
-
-Services communicate through REST APIs or Kafka events instead of directly reading another service's database.
-
----
-
-## Outbox Record
-
-A typical outbox record contains:
-
-```text
-id
-bookingId
-paymentId
-eventType
-topic
-payload
-processed
-createdAt
-```
-
-The business update and outbox insert are committed in one local database transaction.
-
----
-
-## Redis Caching
-
-Redis is used to cache frequently requested data such as movie details.
-
-Typical cache flow:
-
-```text
-Request
-   |
-   +---- Cache hit ----> Return cached response
-   |
-   +---- Cache miss ---> Query database
-                         Store result in Redis
-                         Return response
-```
-
-Cache entries are evicted whenever the underlying movie data is updated or deleted.
+Copy the webhook signing secret printed by Stripe CLI into `STRIPE_WEBHOOK_KEY` and restart the Payment Service.
 
 ---
 
 ## Monitoring
 
-Spring Boot Actuator exposes service health and application metrics.
-
-Example endpoints:
+Prometheus is exposed on:
 
 ```text
-/actuator/health
-/actuator/info
-/actuator/metrics
-/actuator/prometheus
+http://localhost:9090
 ```
 
-Prometheus collects application metrics, while Grafana is used for visualization.
+Grafana is exposed on:
 
-Loki and Promtail provide centralized log aggregation across services.
+```text
+http://localhost:3000
+```
+
+Service health can be inspected through Spring Boot Actuator readiness/health endpoints.
 
 ---
 
-## Testing
+## Automated Testing — Current Focus
 
-The project can include:
+Automated testing is the main current development focus.
 
-* Unit tests for business logic
-* Repository tests
-* Controller integration tests
-* Kafka producer and consumer integration tests
-* Testcontainers-based MySQL, Redis, and Kafka tests
-* Stripe webhook signature-validation tests
-* Concurrency tests for simultaneous seat-lock requests
-* End-to-end booking-flow tests
+The goal is not to chase raw coverage percentage, but to verify the highest-risk business and distributed-system invariants, including:
 
-Run the tests using:
+* Available seats can be locked
+* Active seat locks cannot be stolen
+* Expired locks can be reclaimed/released
+* `BOOKED` seats cannot be released by the expiry workflow
+* Concurrent requests for the same seat result in only one successful owner
+* `PAYMENT_SUCCESS` performs the expected booking transition and outbox write
+* Missing/invalid bookings do not publish a success transition
+* Duplicate Kafka events do not duplicate the business effect
+* Seat confirmation completes the booking
+* Outbox records survive Kafka publication failures
+* Saga happy path completes consistently
+* Saga compensation invokes Stripe refund correctly and remains idempotent
 
-```bash
-./gradlew test
-```
+Planned tools include:
+
+* JUnit 5
+* Mockito
+* Spring Boot integration testing
+* Testcontainers for MySQL/Kafka where real infrastructure behaviour matters
 
 ---
 
@@ -596,92 +591,90 @@ Run the tests using:
 
 ### Preventing Double Booking
 
-Two users may attempt to lock the same seat simultaneously.
+Two users can request the same seat at nearly the same time. Seat state is validated and changed transactionally, with optimistic locking and explicit state validation protecting the booking invariant.
 
-The system solves this by validating and updating seat state inside a database transaction using appropriate row-locking or optimistic-locking semantics.
+### Handling Seat-Lock Expiry Races
+
+Payment confirmation can arrive near the seat-lock expiry boundary. Version checks protect stale updates, while explicit state guards ensure a confirmed `BOOKED` seat cannot later be released by the expiry workflow.
 
 ### Maintaining Cross-Service Consistency
 
-Booking, payment, and seat information belong to different services.
-
-The system uses Saga-based state transitions and compensating actions instead of a distributed ACID transaction.
+Booking, seat, and payment state live in different databases. The system uses Saga transitions and compensation instead of distributed ACID transactions.
 
 ### Preventing Lost Events
 
-A database update may succeed while direct Kafka publication fails.
+Business-state changes are written together with outbox records so Kafka publication can happen asynchronously without losing the event intent.
 
-The Transactional Outbox Pattern ensures that the event remains stored and can be published later.
+### Handling Duplicate Deliveries
 
-### Handling Duplicate Messages
+Kafka/webhook events may be redelivered. Idempotency records and state checks prevent duplicate confirmations, releases, and refund operations.
 
-Kafka and webhook deliveries may occur more than once.
+### Compensating an External Payment
 
-Idempotency records and state-transition checks ensure that duplicate deliveries do not cause duplicate confirmations, refunds, or seat updates.
-
-### Handling Payment Race Conditions
-
-Payment confirmation can arrive close to the seat-lock expiry time.
-
-The Booking Service validates the current booking and payment state before applying the transition and triggers compensation or reconciliation when required.
+A successful Stripe payment does not guarantee the booking can still be completed. If downstream confirmation fails, the Payment Service uses the stored PaymentIntent to perform a real Stripe refund.
 
 ---
 
 ## Current Development Status
 
-Implemented or under active development:
+### Implemented
 
 * Microservice-based architecture
 * Eureka service discovery
-* API Gateway
+* API Gateway module
 * Movie management
 * Redis caching
 * Theatre, screen, seat, and show management
 * Show-overlap validation
-* Concurrent seat locking
+* Concurrent/expiring seat locking
 * Booking and payment persistence
 * Stripe Checkout integration
-* Stripe webhook processing
-* Kafka-based payment events
+* Verified Stripe webhook processing
+* Stripe PaymentIntent persistence
+* Real Stripe refund compensation
+* Kafka-based Saga events
 * Transactional Outbox Pattern
 * Consumer idempotency
-* Retry and Dead Letter Queue handling
 * Docker-based local infrastructure
-* Centralized monitoring and logging
+* Prometheus and Grafana monitoring
+
+### In Progress / Next
+
+* High-value automated unit/integration/concurrency tests
+* OpenTelemetry + Tempo distributed tracing
+* Structured application logging cleanup
 
 ---
 
-## Future Enhancements
+## Possible Future Enhancements
 
-* Complete notification delivery through email or SMS
-* Add automatic refund and reconciliation workflows
-* Add distributed tracing across all services
-* Add contract testing between services
-* Add Testcontainers-based integration tests
-* Add Kubernetes manifests and Helm charts
-* Add rate limiting at the API Gateway
-* Add a reservation waiting queue for high-demand shows
-* Add dynamic pricing based on seat demand
-* Add an administrative dashboard
-* Add CI/CD pipelines for automated testing and deployment
-* Add schema-registry-based event contracts
-* Add outbox cleanup and archival policies
+These are optional extensions rather than claims about the current implementation:
+
+* Kafka retry/backoff and Dead Letter Topic policy
+* Notification delivery through email/SMS
+* Contract testing between services
+* Kubernetes/Helm deployment manifests
+* API Gateway rate limiting
+* Reservation waiting queue for high-demand shows
+* Dynamic pricing
+* CI/CD for automated build/test/deployment
+* Schema Registry / versioned event contracts
+* Outbox cleanup and archival policies
 
 ---
 
 ## Design Principles
 
-The project follows these principles:
-
 * Database per service
-* Loose coupling through asynchronous events
 * Explicit service boundaries
+* Event-driven loose coupling where asynchronous coordination is useful
 * Idempotent consumers
-* Failure-aware workflows
+* Local transactions instead of distributed ACID
+* Failure-aware Saga workflows
+* Explicit business-state transitions
+* External payment compensation
 * Observable services
-* Secure secret management
-* Stateless application instances where possible
-* Horizontal scalability
-* Backward-compatible event evolution
+* Stateless service instances where practical
 
 ---
 
@@ -689,18 +682,17 @@ The project follows these principles:
 
 This project is intended for learning, experimentation, and system-design demonstration.
 
-Before production deployment, additional work would be required around:
+It should not be treated as a production-ready ticketing/payment platform without additional work around areas such as:
 
 * Security hardening
-* PCI-related responsibilities
-* Secret management
-* Data privacy
-* Audit logging
+* PCI and payment-compliance responsibilities
+* Production secret management
+* Data privacy and audit requirements
 * Disaster recovery
-* Load testing
+* Load/stress testing
 * Event-schema governance
-* Automated reconciliation
-* Production-grade deployment and alerting
+* Operational reconciliation
+* Production deployment, alerting, and runbooks
 
 ---
 
@@ -722,4 +714,3 @@ Java Backend Developer focused on:
 ## License
 
 This project is available for educational and demonstration purposes.
-
