@@ -534,7 +534,7 @@ For local webhook forwarding:
 
 ```bash
 stripe login
-stripe listen --forward-to localhost:9071/api/webhook
+stripe listen --forward-to localhost:8072/booking/payments/api/webhook
 ```
 
 Copy the webhook signing secret printed by Stripe CLI into `STRIPE_WEBHOOK_KEY` and restart the Payment Service.
