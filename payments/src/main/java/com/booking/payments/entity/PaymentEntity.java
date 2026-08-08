@@ -32,6 +32,8 @@ public class PaymentEntity {
 
     private String CheckoutUrl;
 
+    private String stripePaymentIntent;
+
     private LocalDateTime createdAt;
 
     private LocalDateTime updatedAt;

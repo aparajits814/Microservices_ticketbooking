@@ -58,7 +58,6 @@ public class BookingProcessingServiceImpl implements BookingProcessingService {
         bookingRepository.save(bookingEntity);
         bookingOutboxService.publishEvent(processingDto, BookingConstants.BOOKING_SUCCESS_TOPIC, BookingConstants.BOOKING_SUCCESS_TOPIC);
 
-
     }
 
     @Override

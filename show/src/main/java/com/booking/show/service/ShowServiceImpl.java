@@ -48,8 +48,6 @@ public class ShowServiceImpl implements ShowService{
 
         boolean showExists = showRepository.existsByScreenIdAndShowStartTimeLessThanAndShowEndTimeGreaterThan(showDto.getScreenId(),showDto.getEndTime(),showDto.getStartTime());
 
-        System.out.println(showExists);
-
         if(showExists){
             throw new ShowAlreadyExistsException(ShowConstants.SHOW_EXISTS_MESSAGE);
         }

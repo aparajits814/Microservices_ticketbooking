@@ -6,6 +6,7 @@ import com.booking.show.repository.ShowSeatOutboxRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.AllArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -15,6 +16,7 @@ import java.util.Optional;
 
 @Service
 @AllArgsConstructor
+@Slf4j
 public class SeatOutboxPoller {
 
     private KafkaTemplate<String, ProcessingDto> kafkaTemplate;
@@ -38,18 +40,17 @@ public class SeatOutboxPoller {
             kafkaTemplate.send(showSeatOutbox.getTopic(),processingDto)
                     .whenComplete((result,exception)->{
 
-                        ProcessingDto processingDtoPublished = result.getProducerRecord().value();
-                        Optional<ShowSeatOutboxEntity> bookingSeatOutboxEntityOptional = showSeatOutboxRepository.
-                                findByPaymentIdAndBookingIdAndEventType(processingDtoPublished.getPaymentId(),
-                                        processingDtoPublished.getBookingId(), processingDtoPublished.getEventType());
-
                         if(exception == null){
+                            ProcessingDto processingDtoPublished = result.getProducerRecord().value();
+                            Optional<ShowSeatOutboxEntity> bookingSeatOutboxEntityOptional = showSeatOutboxRepository.
+                                    findByPaymentIdAndBookingIdAndEventType(processingDtoPublished.getPaymentId(),
+                                            processingDtoPublished.getBookingId(), processingDtoPublished.getEventType());
                             if(bookingSeatOutboxEntityOptional.isPresent()){
 
                                 ShowSeatOutboxEntity seatOutboxEntityToUpdate = bookingSeatOutboxEntityOptional.get();
                                 seatOutboxEntityToUpdate.setProcessed(true);
                                 showSeatOutboxRepository.save(seatOutboxEntityToUpdate);
-                                System.out.println("Booking processed"+processingDtoPublished.getBookingId());
+                                log.info("Booking processed:{}", processingDtoPublished.getBookingId());
 
                             }
 

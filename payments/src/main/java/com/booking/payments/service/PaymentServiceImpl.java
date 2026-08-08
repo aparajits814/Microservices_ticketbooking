@@ -6,7 +6,11 @@ import com.booking.payments.entity.IdempotencyEntity;
 import com.booking.payments.entity.PaymentEntity;
 import com.booking.payments.repository.IdempotencyRepository;
 import com.booking.payments.repository.PaymentsRepository;
+import com.stripe.exception.StripeException;
+import com.stripe.model.Refund;
+import com.stripe.param.RefundCreateParams;
 import lombok.AllArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -14,6 +18,7 @@ import java.util.Optional;
 
 @Service
 @AllArgsConstructor
+@Slf4j
 public class PaymentServiceImpl implements PaymentService{
 
     private PaymentsRepository paymentsRepository;
@@ -24,7 +29,9 @@ public class PaymentServiceImpl implements PaymentService{
 
     @Override
     @Transactional
-    public void paymentSuccess(String sessionId, String sessionPaymentStatus) {
+    public void paymentSuccess(String sessionId, String sessionPaymentStatus, String paymentIntentId) {
+
+        log.info("Payment intent ID:{}",paymentIntentId);
 
         Optional<PaymentEntity> paymentEntityOptional = paymentsRepository.findByStripeCheckoutSessionId(sessionId);
 
@@ -33,7 +40,7 @@ public class PaymentServiceImpl implements PaymentService{
         }
 
         String paymentStatus = paymentEntityOptional.get().getPaymentStatus();
-        System.out.println("payment Status:"+paymentStatus);
+        log.info("payment Status:{}", paymentStatus);
 
         if(!paymentStatus.equalsIgnoreCase(PaymentsConstants.PAYMENT_INITIATED)){
             return;
@@ -42,6 +49,7 @@ public class PaymentServiceImpl implements PaymentService{
         PaymentEntity paymentEntity = paymentEntityOptional.get();
 
         paymentEntity.setPaymentStatus(PaymentsConstants.PAYMENT_CONFIRMED);
+        paymentEntity.setStripePaymentIntent(paymentIntentId);
 
         paymentsRepository.save(paymentEntity);
 
@@ -88,6 +96,7 @@ public class PaymentServiceImpl implements PaymentService{
     @Override
     @Transactional
     public void processFailedBookingEvent(ProcessingDto processingDto) {
+        log.info("Inside process failed booking event");
 
         IdempotencyEntity idempotencyEntity = new IdempotencyEntity();
 
@@ -99,12 +108,39 @@ public class PaymentServiceImpl implements PaymentService{
 
         Optional<PaymentEntity> paymentEntityOptional = paymentsRepository.findById(processingDto.getPaymentId());
 
+        if(paymentEntityOptional.isEmpty()){
+            return;
+        }
+
         PaymentEntity paymentEntity = paymentEntityOptional.get();
 
-        paymentEntity.setPaymentStatus(PaymentsConstants.PAYMENT_REFUNDED);
+        log.info("Going to refund the payment");
 
-        paymentsRepository.save(paymentEntity);
+        try {
+            refundPayment(paymentEntity);
+        } catch (StripeException e) {
+            log.info("Refund failed");
+            throw new IllegalStateException();
+        }
         //Notification
 
+    }
+
+    private void refundPayment(PaymentEntity paymentEntity) throws StripeException{
+
+        RefundCreateParams params =
+                RefundCreateParams.builder()
+                        .setPaymentIntent(
+                                paymentEntity.getStripePaymentIntent()
+                        )
+                        .build();
+
+        Refund refund = Refund.create(params);
+
+        if ("succeeded".equals(refund.getStatus())) {
+            paymentEntity.setPaymentStatus(PaymentsConstants.PAYMENT_REFUNDED);
+            paymentsRepository.save(paymentEntity);
+        }
+        log.info("Refunded");
     }
 }

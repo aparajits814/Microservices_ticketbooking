@@ -122,6 +122,7 @@ public class PaymentCheckoutServiceImpl implements PaymentCheckoutService{
 
         paymentEntity.setStripeCheckoutSessionId(session.getId());
         paymentEntity.setCheckoutUrl(session.getUrl());
+        paymentEntity.setStripePaymentIntent(session.getPaymentIntent());
 
         paymentsRepository.save(paymentEntity);
 

@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS payments (
     currency VARCHAR(3) NOT NULL DEFAULT 'INR',
     payment_status VARCHAR(30) NOT NULL,
     stripe_checkout_session_id VARCHAR(100),
+    stripe_payment_intent VARCHAR(100),
     checkout_url VARCHAR(500),
     created_at TIMESTAMP,
     updated_at TIMESTAMP,

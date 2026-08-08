@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS booking_outbox (
     processed BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP,
     CONSTRAINT uk_booking_payment
-    UNIQUE (booking_id, payment_id)
+    UNIQUE (booking_id, payment_id, event_type)
     );
 
 CREATE TABLE IF NOT EXISTS idempotency_check(

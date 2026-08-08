@@ -33,9 +33,7 @@ public class GatewayserverApplication {
 				).uri("lb://SHOWS"))
 				.route( p -> (
 						p.path("/booking/payments/**")
-								.filters(f -> f.rewritePath("/booking/payments/(?<segment>.*)","/${segment}")
-										.requestRateLimiter(config -> config.setRateLimiter(redisRateLimiter())
-												.setKeyResolver(keyResolver())))
+								.filters(f -> f.rewritePath("/booking/payments/(?<segment>.*)","/${segment}"))
 				).uri("lb://PAYMENTS"))
 				.route( p -> (
 						p.path("/booking/ticket/**")

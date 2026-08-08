@@ -38,12 +38,11 @@ public class BookingOutboxPoller {
             kafkaTemplate.send(bookingSeatOutboxEntity.getTopic(),processingDto)
                     .whenComplete((result,exception)->{
 
-                        ProcessingDto processingDtoPublished = result.getProducerRecord().value();
-                        Optional<BookingSeatOutboxEntity> bookingSeatOutboxEntityOptional = bookingSeatOutboxRepository.
-                                findByPaymentIdAndBookingIdAndEventType(processingDtoPublished.getPaymentId(),
-                                        processingDtoPublished.getBookingId(), processingDtoPublished.getEventType());
-
                         if(exception == null){
+                            ProcessingDto processingDtoPublished = result.getProducerRecord().value();
+                            Optional<BookingSeatOutboxEntity> bookingSeatOutboxEntityOptional = bookingSeatOutboxRepository.
+                                    findByPaymentIdAndBookingIdAndEventType(processingDtoPublished.getPaymentId(),
+                                            processingDtoPublished.getBookingId(), processingDtoPublished.getEventType());
                             if(bookingSeatOutboxEntityOptional.isPresent()){
 
                                 BookingSeatOutboxEntity bookingSeatOutboxEntityToUpdate = bookingSeatOutboxEntityOptional.get();

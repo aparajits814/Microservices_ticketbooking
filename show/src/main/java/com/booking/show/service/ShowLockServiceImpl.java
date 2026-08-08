@@ -11,6 +11,7 @@ import com.booking.show.exceptions.SeatUnavailableException;
 import com.booking.show.exceptions.ShowInactiveException;
 import com.booking.show.repository.ShowSeatRepository;
 import lombok.AllArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,6 +22,7 @@ import java.util.stream.Collectors;
 
 @Service
 @AllArgsConstructor
+@Slf4j
 public class ShowLockServiceImpl implements ShowLockService{
 
     private ShowSeatRepository showSeatRepository;
@@ -32,9 +34,9 @@ public class ShowLockServiceImpl implements ShowLockService{
     public SeatLockResponseDto lockSeats(SeatsLockDto seatsLockDto) {
 
         Set<String> seatIdRequestedList = new HashSet<>(seatsLockDto.getSeatIds());
-        System.out.println("Printing seats");
+        log.info("Printing seats");
         for(String s: seatIdRequestedList){
-            System.out.println(s+" ");
+            log.info("{} ", s);
         }
 
         List<ShowSeatEntity> showSeatEntityList = showSeatRepository.findByShowId(seatsLockDto.getShowId());
@@ -48,12 +50,12 @@ public class ShowLockServiceImpl implements ShowLockService{
         if(!ShowConstants.SHOW_STATUS_ACTIVE.equalsIgnoreCase(showInfoDto.getShowStatus())){
             throw new ShowInactiveException(ShowConstants.ILLEGAL_SHOW_EXCEPTION);
         }
-        System.out.println("After Show status");
+        log.info("After Show status");
 
         if(LocalDateTime.now().isAfter(showInfoDto.getShowStartTime())){
             throw new IllegalShowException(ShowConstants.ILLEGAL_SHOW_EXCEPTION);
         }
-        System.out.println("After date and time check");
+        log.info("After date and time check");
 
 
         for(String seatId : seatIdRequestedList){
@@ -61,7 +63,7 @@ public class ShowLockServiceImpl implements ShowLockService{
                 throw new IllegalShowException(ShowConstants.ILLEGAL_SHOW_EXCEPTION);
             }
         }
-        System.out.println("After Seat Check");
+        log.info("After Seat Check");
 
         for(ShowSeatEntity showSeatEntity : showSeatEntityListRequested){
             boolean available = showSeatEntity.getSeatStatus().equals(ShowConstants.SEAT_STATUS_AVAILABLE);
@@ -80,14 +82,14 @@ public class ShowLockServiceImpl implements ShowLockService{
             showSeatEntity.setLockedByBookingId(seatsLockDto.getBookingId());
             showSeatEntity.setSeatStatus(ShowConstants.SEAT_STATUS_LOCKED);
         }
-        System.out.println("After Upadting");
+        log.info("After Updating");
 
         try {
             showSeatRepository.flush();
         }catch (ObjectOptimisticLockingFailureException e){
             throw new SeatUnavailableException(ShowConstants.SEAT_UNAVAILABLE_EXCEPTION);
         }
-        System.out.println("After flush");
+        log.info("After flush");
 
         return new SeatLockResponseDto(ShowConstants.SEAT_STATUS_LOCKED,showInfoDto);
     }

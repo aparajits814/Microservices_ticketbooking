@@ -8,10 +8,12 @@ import com.stripe.model.StripeObject;
 import com.stripe.model.checkout.Session;
 import com.stripe.net.Webhook;
 import lombok.AllArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 @Service
 @AllArgsConstructor
+@Slf4j
 public class PaymentWebhookServiceImpl implements PaymentWebhookService{
 
     private final StripeProperties stripeProperties;
@@ -35,22 +37,19 @@ public class PaymentWebhookServiceImpl implements PaymentWebhookService{
 
         }
 
-        System.out.println("event:"+event.getType());
+        log.info("event:{}", event.getType());
     }
 
     private void handleCheckoutCompleted(Event event){
 
         Session session = extractCheckoutSession(event);
-
-        paymentService.paymentSuccess(session.getId(), session.getPaymentStatus());
-
+        paymentService.paymentSuccess(session.getId(), session.getPaymentStatus(), session.getPaymentIntent());
 
     }
 
     private void handleCheckoutExpired(Event event){
 
         Session session = extractCheckoutSession(event);
-
         paymentService.paymentExpired(session.getId());
 
     }

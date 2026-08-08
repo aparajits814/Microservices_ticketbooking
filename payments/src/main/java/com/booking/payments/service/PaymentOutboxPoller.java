@@ -38,12 +38,11 @@ public class PaymentOutboxPoller {
             kafkaTemplate.send(paymentPollerEntity.getTopic(),processingDto)
                     .whenComplete((result,exception)->{
 
-                        ProcessingDto processingDtoPublished = result.getProducerRecord().value();
-                        Optional<PaymentPollerEntity> paymentPollerEntityOptional = paymentPollerRepository.
-                                findByPaymentIdAndBookingIdAndEventType(processingDtoPublished.getPaymentId(),
-                                        processingDtoPublished.getBookingId(), processingDtoPublished.getEventType());
-
                         if(exception == null){
+                            ProcessingDto processingDtoPublished = result.getProducerRecord().value();
+                            Optional<PaymentPollerEntity> paymentPollerEntityOptional = paymentPollerRepository.
+                                    findByPaymentIdAndBookingIdAndEventType(processingDtoPublished.getPaymentId(),
+                                            processingDtoPublished.getBookingId(), processingDtoPublished.getEventType());
                             if(paymentPollerEntityOptional.isPresent()){
 
                                 PaymentPollerEntity paymentPollerEntityToUpdate = paymentPollerEntityOptional.get();
