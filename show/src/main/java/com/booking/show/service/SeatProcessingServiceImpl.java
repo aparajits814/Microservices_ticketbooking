@@ -38,6 +38,7 @@ public class SeatProcessingServiceImpl implements SeatProcessingService{
 
         for(ShowSeatEntity showSeatEntity : showSeatEntityList){
             showSeatEntity.setSeatStatus(ShowConstants.SEAT_STATUS_BOOKED);
+            showSeatEntity.setLockExpiry(null);
         }
 
         try {

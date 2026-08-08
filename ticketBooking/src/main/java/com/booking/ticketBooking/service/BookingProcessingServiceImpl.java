@@ -31,7 +31,6 @@ public class BookingProcessingServiceImpl implements BookingProcessingService {
         saveProcessedEvent(processingDto);
 
         processingDto.setEventType(BookingConstants.BOOKING_SUCCESS_TOPIC);
-        bookingOutboxService.publishEvent(processingDto, BookingConstants.BOOKING_SUCCESS_TOPIC, BookingConstants.BOOKING_SUCCESS_TOPIC);
 
         Optional<BookingEntity> bookingEntityOptional = bookingRepository.findById(processingDto.getBookingId());
 
@@ -57,6 +56,7 @@ public class BookingProcessingServiceImpl implements BookingProcessingService {
         bookingEntity.setBookingStatus(BookingConstants.BOOKING_STATUS_PENDING_CONFIRMATION);
 
         bookingRepository.save(bookingEntity);
+        bookingOutboxService.publishEvent(processingDto, BookingConstants.BOOKING_SUCCESS_TOPIC, BookingConstants.BOOKING_SUCCESS_TOPIC);
 
 
     }

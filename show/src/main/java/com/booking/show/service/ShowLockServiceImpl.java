@@ -108,6 +108,10 @@ public class ShowLockServiceImpl implements ShowLockService{
             return;
         }
 
+        if(!ShowConstants.SEAT_STATUS_LOCKED.equalsIgnoreCase(showSeatEntity.getSeatStatus())){
+            return;
+        }
+
         showSeatEntity.setLockExpiry(null);
         showSeatEntity.setLockedByBookingId(null);
         showSeatEntity.setSeatStatus(ShowConstants.SEAT_STATUS_AVAILABLE);
