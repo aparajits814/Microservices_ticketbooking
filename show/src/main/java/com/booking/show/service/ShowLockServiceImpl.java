@@ -5,29 +5,23 @@ import com.booking.show.dto.SeatLockResponseDto;
 import com.booking.show.dto.SeatsLockDto;
 import com.booking.show.dto.ShowInfoDto;
 import com.booking.show.entity.ShowSeatEntity;
+import com.booking.show.entity.ShowSeatId;
 import com.booking.show.exceptions.IllegalShowException;
 import com.booking.show.exceptions.SeatUnavailableException;
 import com.booking.show.exceptions.ShowInactiveException;
-import com.booking.show.repository.SeatRepository;
 import com.booking.show.repository.ShowSeatRepository;
 import lombok.AllArgsConstructor;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.chrono.ChronoLocalDate;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
 @AllArgsConstructor
 public class ShowLockServiceImpl implements ShowLockService{
-
-    private SeatRepository seatRepository;
 
     private ShowSeatRepository showSeatRepository;
 
@@ -70,7 +64,7 @@ public class ShowLockServiceImpl implements ShowLockService{
         System.out.println("After Seat Check");
 
         for(ShowSeatEntity showSeatEntity : showSeatEntityListRequested){
-            boolean available = showSeatEntity.getSeatStatus().equals(ShowConstants.SEAT_STATUS_AVALIABLE);
+            boolean available = showSeatEntity.getSeatStatus().equals(ShowConstants.SEAT_STATUS_AVAILABLE);
 
             boolean expiredLock =
                     ShowConstants.SEAT_STATUS_LOCKED.equals(showSeatEntity.getSeatStatus()) && showSeatEntity.getLockExpiry() != null
@@ -78,7 +72,7 @@ public class ShowLockServiceImpl implements ShowLockService{
 
             if(!available && !expiredLock){
 
-                throw new SeatUnavailableException(ShowConstants.SEAT_UNAVALIABLE_EXCEPTION);
+                throw new SeatUnavailableException(ShowConstants.SEAT_UNAVAILABLE_EXCEPTION);
 
             }
 
@@ -91,10 +85,34 @@ public class ShowLockServiceImpl implements ShowLockService{
         try {
             showSeatRepository.flush();
         }catch (ObjectOptimisticLockingFailureException e){
-            throw new SeatUnavailableException(ShowConstants.SEAT_UNAVALIABLE_EXCEPTION);
+            throw new SeatUnavailableException(ShowConstants.SEAT_UNAVAILABLE_EXCEPTION);
         }
         System.out.println("After flush");
 
         return new SeatLockResponseDto(ShowConstants.SEAT_STATUS_LOCKED,showInfoDto);
+    }
+
+    @Override
+    @Transactional
+    public void unlockSeat(String seatId, String showId, Integer expectedVersion) {
+
+        Optional<ShowSeatEntity> showSeatEntityOptional = showSeatRepository.findById(new ShowSeatId(seatId, showId));
+
+        if(showSeatEntityOptional.isEmpty()){
+            return;
+        }
+
+        ShowSeatEntity showSeatEntity = showSeatEntityOptional.get();
+
+        if (!Objects.equals(showSeatEntity.getVersion(), expectedVersion)) {
+            return;
+        }
+
+        showSeatEntity.setLockExpiry(null);
+        showSeatEntity.setLockedByBookingId(null);
+        showSeatEntity.setSeatStatus(ShowConstants.SEAT_STATUS_AVAILABLE);
+
+        showSeatRepository.flush();
+
     }
 }

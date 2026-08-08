@@ -7,4 +7,6 @@ public interface ShowLockService {
 
     SeatLockResponseDto lockSeats(SeatsLockDto seatsLockDto);
 
+    void unlockSeat(String seatId, String showId, Integer expectedVersion);
+
 }

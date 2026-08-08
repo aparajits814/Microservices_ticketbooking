@@ -2,11 +2,9 @@ package com.booking.show.service;
 
 import com.booking.show.constants.ShowConstants;
 import com.booking.show.dto.ProcessingDto;
-import com.booking.show.repository.ShowSeatRepository;
 import lombok.AllArgsConstructor;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 
 @Service
@@ -22,7 +20,7 @@ public class ShowListener {
 
     }
 
-    @KafkaListener(topics = ShowConstants.SEAT_RELEASE_TPOIC)
+    @KafkaListener(topics = ShowConstants.SEAT_RELEASE_TOPIC)
     public void processBookingFailedEvent(ProcessingDto processingDto) {
 
         seatProcessingService.processBookingFailedEvent(processingDto);

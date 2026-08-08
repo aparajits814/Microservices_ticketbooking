@@ -63,8 +63,8 @@ public class SeatProcessingServiceImpl implements SeatProcessingService{
         List<ShowSeatEntity> showSeatEntityList = showSeatRepository.findByLockedByBookingId(processingDto.getBookingId());
 
         for(ShowSeatEntity showSeatEntity : showSeatEntityList){
-            if(!showSeatEntity.getSeatStatus().equalsIgnoreCase(ShowConstants.SEAT_STATUS_AVALIABLE)){
-                showSeatEntity.setSeatStatus(ShowConstants.SEAT_STATUS_AVALIABLE);
+            if(!showSeatEntity.getSeatStatus().equalsIgnoreCase(ShowConstants.SEAT_STATUS_AVAILABLE)){
+                showSeatEntity.setSeatStatus(ShowConstants.SEAT_STATUS_AVAILABLE);
             }
         }
 

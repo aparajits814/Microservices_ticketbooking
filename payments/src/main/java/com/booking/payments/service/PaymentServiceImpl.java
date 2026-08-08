@@ -6,9 +6,7 @@ import com.booking.payments.entity.IdempotencyEntity;
 import com.booking.payments.entity.PaymentEntity;
 import com.booking.payments.repository.IdempotencyRepository;
 import com.booking.payments.repository.PaymentsRepository;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import lombok.AllArgsConstructor;
-import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -89,7 +87,6 @@ public class PaymentServiceImpl implements PaymentService{
 
     @Override
     @Transactional
-    @KafkaListener(topics = PaymentsConstants.BOOKING_FAILED_TOPIC)
     public void processFailedBookingEvent(ProcessingDto processingDto) {
 
         IdempotencyEntity idempotencyEntity = new IdempotencyEntity();

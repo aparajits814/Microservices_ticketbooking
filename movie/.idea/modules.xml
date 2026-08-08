@@ -2,9 +2,9 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/modules/movie.main.iml" filepath="$PROJECT_DIR$/.idea/modules/movie.main.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/movies.main.iml" filepath="$PROJECT_DIR$/.idea/modules/movies.main.iml" />
       <module fileurl="file://$PROJECT_DIR$/.idea/modules/payments.main.iml" filepath="$PROJECT_DIR$/.idea/modules/payments.main.iml" />
-      <module fileurl="file://$PROJECT_DIR$/.idea/modules/show.main.iml" filepath="$PROJECT_DIR$/.idea/modules/show.main.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/shows.main.iml" filepath="$PROJECT_DIR$/.idea/modules/shows.main.iml" />
       <module fileurl="file://$PROJECT_DIR$/.idea/modules/ticketBooking.main.iml" filepath="$PROJECT_DIR$/.idea/modules/ticketBooking.main.iml" />
     </modules>
   </component>

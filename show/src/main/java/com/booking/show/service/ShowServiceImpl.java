@@ -69,7 +69,7 @@ public class ShowServiceImpl implements ShowService{
         for(SeatEntity seatEntity : seatEntityList){
 
             ShowSeatEntity showSeatEntity = new ShowSeatEntity();
-            showSeatEntity.setSeatStatus(ShowConstants.SEAT_STATUS_AVALIABLE);
+            showSeatEntity.setSeatStatus(ShowConstants.SEAT_STATUS_AVAILABLE);
             showSeatEntity.setShowId(showEntity.getShowId());
             showSeatEntity.setSeatId(seatEntity.getSeatId());
             showSeatEntityList.add(showSeatEntity);
